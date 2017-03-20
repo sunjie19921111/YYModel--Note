@@ -9,12 +9,11 @@
 //  LICENSE file in the root directory of this source tree.
 //
 
-
+#
 #import "YYClassInfo.h"
 #import <objc/runtime.h>
 
 YYEncodingType YYEncodingGetType(const char *typeEncoding) {
-    NSLog(@"YYEncodingGetType(const char *typeEncoding)");
     char *type = (char *)typeEncoding;
     if (!type) return YYEncodingTypeUnknown;
     size_t len = strlen(type);
@@ -95,7 +94,6 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
 @implementation YYClassIvarInfo
 
 - (instancetype)initWithIvar:(Ivar)ivar {
-     NSLog(@"- (instancetype)initWithIvar:(Ivar)ivar");
     if (!ivar) return nil;
     self = [super init];
     _ivar = ivar;
@@ -127,6 +125,7 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
     if (name) {
         _name = [NSString stringWithUTF8String:name];
     }
+    
     const char *typeEncoding = method_getTypeEncoding(method);
     if (typeEncoding) {
         _typeEncoding = [NSString stringWithUTF8String:typeEncoding];
@@ -164,12 +163,11 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
         _name = [NSString stringWithUTF8String:name];
     }
     
+    //objc_property_attribute_t 是什么东西可以到这里去看http://blog.csdn.net/sunjie886/article/details/61914594
     YYEncodingType type = 0;
     unsigned int attrCount;
     objc_property_attribute_t *attrs = property_copyAttributeList(property, &attrCount);
-    
     for (unsigned int i = 0; i < attrCount; i++) {
-        
         switch (attrs[i].name[0]) {
             case 'T': { // Type encoding
                 if (attrs[i].value) {
@@ -234,20 +232,29 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
                 if (attrs[i].value) {
                     _setter = NSSelectorFromString([NSString stringWithUTF8String:attrs[i].value]);
                 }
-            } // break; commented for code coverage in next line
+            }
             default: break;
         }
     }
+    
     if (attrs) {
         free(attrs);
         attrs = NULL;
     }
-    
     _type = type;
     if (_name.length) {
         if (!_getter) {
+            //SEL 我感觉就是这么个意思了，有不同意思的请留言
+            //SEL就是对方法的一种包装。包装的SEL类型数据它对应相应的方法地址，找到方法地址就可以调用方法
+            // 方法的存储位置
+            //在内存中每个类的方法都存储在类对象中
+            //每个方法都有一个与之对应的SEL类型的数据
+            // 根据一个SEL数据就可以找到对应的方法地址，进而调用方法
+            // SEL类型的定义:  typedef struct objc_selector *SEL
+            //更多详情请到http://blog.csdn.net/sunjie886/article/details/61914996
             _getter = NSSelectorFromString(_name);
         }
+        //同上
         if (!_setter) {
             _setter = NSSelectorFromString([NSString stringWithFormat:@"set%@%@:", [_name substringToIndex:1].uppercaseString, [_name substringFromIndex:1]]);
         }
@@ -262,7 +269,7 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
 }
 
 - (instancetype)initWithClass:(Class)cls {
-    NSLog(@"initWithClass");
+   //这里看的东西先看一篇文章容易理解 http://blog.csdn.net/sunjie886/article/details/61918905
     if (!cls) return nil;
     self = [super init];
     _cls = cls;
@@ -279,14 +286,29 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
 }
 
 - (void)_update {
-     NSLog(@"_update");
+    //初始化
     _ivarInfos = nil;
     _methodInfos = nil;
     _propertyInfos = nil;
-    
+     //Class的转化：1　　　　　Class　变量名　=　[类或者对象　class];
+    // 2　Class　变量名　=　[类或者对象　superclass];
+    //3　 Class　变量名　=　NSClassFromString(方法名字的字符串);
+    //4　 NSString　*变量名　=　NSStringFromClass(Class参数);
+    //更多的详情，请到http://blog.csdn.net/sunjie886/article/details/61915135
     Class cls = self.cls;
     unsigned int methodCount = 0;
     //得到所有类中所有的方法
+    /*
+    @interface YYClassMethodInfo : NSObject
+    @property (nonatomic, assign, readonly) Method method;                  ///< 结构体
+    @property (nonatomic, strong, readonly) NSString *name;                 ///< 名字
+    @property (nonatomic, assign, readonly) SEL sel;                        ///< method's selector
+    @property (nonatomic, assign, readonly) IMP imp;                        ///< method's implementation
+    @property (nonatomic, strong, readonly) NSString *typeEncoding;         ///< method's parameter and return types
+    @property (nonatomic, strong, readonly) NSString *returnTypeEncoding;   ///< return value's type
+    @property (nullable, nonatomic, strong, readonly) NSArray<NSString *> *argumentTypeEncodings; ///< array of
+    @end  */
+ 
     Method *methods = class_copyMethodList(cls, &methodCount);
     if (methods) {
         NSMutableDictionary *methodInfos = [NSMutableDictionary new];
@@ -302,6 +324,18 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
     
     unsigned int propertyCount = 0;
     //得到类中所有的属性
+    /*
+    @interface YYClassPropertyInfo : NSObject
+    @property (nonatomic, assign, readonly) objc_property_t property; ///< 结构体
+    @property (nonatomic, strong, readonly) NSString *name;           ///< 名字
+    @property (nonatomic, assign, readonly) YYEncodingType type;      ///< 类型
+    @property (nonatomic, strong, readonly) NSString *typeEncoding;   ///< 编码
+    @property (nonatomic, strong, readonly) NSString *ivarName;       ///< 变量的名字
+    @property (nullable, nonatomic, assign, readonly) Class cls;      ///< 类
+    @property (nullable, nonatomic, strong, readonly) NSArray<NSString *> *protocols; ///<协议
+    @property (nonatomic, assign, readonly) SEL getter;               ///< getter
+    @property (nonatomic, assign, readonly) SEL setter;               ///< setter 
+    */
     objc_property_t *properties = class_copyPropertyList(cls, &propertyCount);
     if (properties) {
         NSMutableDictionary *propertyInfos = [NSMutableDictionary new];
@@ -314,8 +348,17 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
         free(properties);
     }
     
-    //取出所有的变量
-    unsigned int ivarCount = 0;
+    //取出所有的变量 ptrdiff_t 这个应该牵扯到一个数据宽度的问题，不知道对不对 我猜的 官方解释：ptrdiff_t类型变量通常用来保存两个指针减法操作的结果
+    /*  
+     @interface YYClassIvarInfo : NSObject
+     @property (nonatomic, assign, readonly) Ivar ivar;              ///< ivar opaque struct
+     @property (nonatomic, strong, readonly) NSString *name;         ///< Ivar's name
+     @property (nonatomic, assign, readonly) ptrdiff_t         ///< Ivar's offset
+     @property (nonatomic, strong, readonly) NSString *typeEncoding; ///< Ivar's type encoding
+     @property (nonatomic, assign, readonly) YYEncodingType type;    ///< Ivar's type
+     
+     */
+    unsigned int ivarCount = 0; //相当于一个计数器
     Ivar *ivars = class_copyIvarList(cls, &ivarCount);
     if (ivars) {
         NSMutableDictionary *ivarInfos = [NSMutableDictionary new];
@@ -346,8 +389,10 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
 + (instancetype)classInfoWithClass:(Class)cls {
     NSLog(@"classInfoWithClass:(Class)cls");
     if (!cls) return nil;
+    
     static CFMutableDictionaryRef classCache;
     static CFMutableDictionaryRef metaCache;
+    
     static dispatch_once_t onceToken;
     static dispatch_semaphore_t lock;
     dispatch_once(&onceToken, ^{
@@ -359,11 +404,12 @@ YYEncodingType YYEncodingGetType(const char *typeEncoding) {
     
     dispatch_semaphore_wait(lock, DISPATCH_TIME_FOREVER);
     //得到所有的Value
-    YYClassInfo *info = CFDictionaryGetValue(class_isMetaClass(cls) ? metaCache : classCache, (__bridge const void *)(cls));
+    BOOL is = class_isMetaClass(cls);
+    YYClassInfo *info = CFDictionaryGetValue((cls) ? metaCache : classCache, (__bridge const void *)(cls));
     
     if (info && info->_needUpdate) {
         
-        //*********************************************重点
+        //****************重点*****************************
         [info _update];
     }
     

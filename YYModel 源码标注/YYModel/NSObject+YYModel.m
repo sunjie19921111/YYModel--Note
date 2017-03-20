@@ -699,15 +699,17 @@ static force_inline id YYValueForMultiKeys(__unsafe_unretained NSDictionary *dic
 
 /// Returns the cached model class meta
 + (instancetype)metaWithClass:(Class)cls {
-    NSLog(@"metaWithClass:(Class)cls");
+    //判断是否为空
     if (!cls) return nil;
-    
     //CFMutableDictionaryRef matchDictionary = IOServiceMatching("com_osxkernel_driver_IOKitTest");
     //kr = IOServiceGetMatchingServices(kIOMasterPortDefault, matchDictionary, &iterator);
     //说是于内核驱动交互的，我不懂，没办法解释。应该属于容器的作用这里
+    //这里有个博客可以去这里看一下了http://www.tanhao.me/pieces/1525.html/
     static CFMutableDictionaryRef cache;
     
+    //GCD创建单例
     static dispatch_once_t onceToken;
+    //信号量 //这里我会写个博客解释一下这个信号量是什么东西，为什么要用。
     static dispatch_semaphore_t lock;
     dispatch_once(&onceToken, ^{
         cache = CFDictionaryCreateMutable(CFAllocatorGetDefault(), 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -1574,20 +1576,23 @@ static NSString *ModelDescription(NSObject *model) {
 //字典转模型
 + (instancetype)modelWithDictionary:(NSDictionary *)dictionary {
     NSLog(@"modelWithDictionary");
+    //判断字典是否为空
     if (!dictionary || dictionary == (id)kCFNull) return nil;
+    //判断是否属于这个类
     if (![dictionary isKindOfClass:[NSDictionary class]]) return nil;
-
+    //得到模型的class
     Class cls = [self class];
     //得到元数据
-    _YYModelMeta *modelMeta = [_YYModelMeta metaWithClass:cls];
+    _YYModelMeta *modelMeta = [_YYModelMeta metaWithClass:cls]; //这个函数里面调用的第一个方法
     //是否已经使用自定义的NSDictionary转化过来；
     if (modelMeta->_hasCustomClassFromDictionary) {
         cls = [cls modelCustomClassForDictionary:dictionary] ?: cls;
     }
     
+    //初始化
     NSObject *one = [cls new];
     //判断是否用专门的方法处理过了
-    if ([one modelSetWithDictionary:dictionary])return one;
+    if ([one modelSetWithDictionary:dictionary])return one; //这个函数里面调用的第二个方法
     return nil;
 }
 
@@ -1597,26 +1602,27 @@ static NSString *ModelDescription(NSObject *model) {
 }
 
 - (BOOL)modelSetWithDictionary:(NSDictionary *)dic {
-    NSLog(@"modelSetWithDictionary:(NSDictionary *)dic ");
+
     if (!dic || dic == (id)kCFNull) return NO;
     if (![dic isKindOfClass:[NSDictionary class]]) return NO;
     
-    //bject_getClass(self)
+    //object_getClass(self) 就是【model class】
     _YYModelMeta *modelMeta = [_YYModelMeta metaWithClass:object_getClass(self)];
+    //判断model的key是否为空
     if (modelMeta->_keyMappedCount == 0) return NO;
+    
     //将会从字典中转过开来
     if (modelMeta->_hasCustomWillTransformFromDictionary) {
         dic = [((id<YYModel>)self) modelCustomWillTransformFromDictionary:dic];
         if (![dic isKindOfClass:[NSDictionary class]]) return NO;
     }
-    /* 
-     
+    
+    /* 三者的关系
      typedef struct {
      void *modelMeta;  ///< _YYModelMeta
      void *model;      ///< id (self)
      void *dictionary; ///< NSDictionary (json)
      } ModelSetContext;
-
      */
     
     ModelSetContext context = {0};
